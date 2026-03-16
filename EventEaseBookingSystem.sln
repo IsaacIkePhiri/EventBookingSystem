@@ -1,0 +1,30 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36705.20 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EventEaseBookingSystem", "EventEaseBookingSystem.csproj", "{5D5E420E-48DA-4914-8759-B27E7C11FB12}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Data", "Data", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
+	ProjectSection(SolutionItems) = preProject
+		ApplicationDbContext.cs = ApplicationDbContext.cs
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{5D5E420E-48DA-4914-8759-B27E7C11FB12}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5D5E420E-48DA-4914-8759-B27E7C11FB12}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5D5E420E-48DA-4914-8759-B27E7C11FB12}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5D5E420E-48DA-4914-8759-B27E7C11FB12}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {C132B8AE-2F67-4C9F-8AA7-4B21D9504C67}
+	EndGlobalSection
+EndGlobal
