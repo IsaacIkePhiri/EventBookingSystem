@@ -1,12 +1,11 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using EventEaseBookingSystem.Data;
 using EventEaseBookingSystem.Models;
+using Azure.Storage.Blobs;
 
 namespace EventEaseBookingSystem.Controllers
 {
@@ -29,16 +28,13 @@ namespace EventEaseBookingSystem.Controllers
         public async Task<IActionResult> Details(int? id)
         {
             if (id == null)
-            {
                 return NotFound();
-            }
 
             var venue = await _context.Venues
                 .FirstOrDefaultAsync(m => m.VenueId == id);
+
             if (venue == null)
-            {
                 return NotFound();
-            }
 
             return View(venue);
         }
@@ -50,18 +46,53 @@ namespace EventEaseBookingSystem.Controllers
         }
 
         // POST: Venues/Create
-        // To protect from overposting attacks, enable the specific properties you want to bind to.
-        // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("VenueId,Name,Location,Capacity,ImageUrl")] Venue venue)
+        public async Task<IActionResult> Create(Venue venue, IFormFile imageFile)
         {
-            if (ModelState.IsValid)
+            try
             {
-                _context.Add(venue);
-                await _context.SaveChangesAsync();
-                return RedirectToAction(nameof(Index));
+                // IMAGE UPLOAD
+                if (imageFile != null && imageFile.Length > 0)
+                {
+                    var connectionString =
+                        "DefaultEndpointsProtocol=http;" +
+                        "AccountName=devstoreaccount1;" +
+                        "AccountKey=Eby8vdM02xNOcqFeqCnf2g==;" +
+                        "BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;";
+
+                    var containerName = "venueimages";
+
+                    var containerClient =
+                        new BlobContainerClient(connectionString, containerName);
+
+                    await containerClient.CreateIfNotExistsAsync();
+
+                    var blobClient =
+                        containerClient.GetBlobClient(imageFile.FileName);
+
+                    using (var stream = imageFile.OpenReadStream())
+                    {
+                        await blobClient.UploadAsync(stream, true);
+                    }
+
+                    venue.ImageUrl = blobClient.Uri.ToString();
+                }
+
+                if (ModelState.IsValid)
+                {
+                    _context.Venues.Add(venue);
+
+                    await _context.SaveChangesAsync();
+
+                    return RedirectToAction(nameof(Index));
+                }
             }
+            catch (Exception ex)
+            {
+                return Content(ex.Message + " --- " + ex.InnerException?.Message);
+            }
+
             return View(venue);
         }
 
@@ -69,50 +100,67 @@ namespace EventEaseBookingSystem.Controllers
         public async Task<IActionResult> Edit(int? id)
         {
             if (id == null)
-            {
                 return NotFound();
-            }
 
             var venue = await _context.Venues.FindAsync(id);
+
             if (venue == null)
-            {
                 return NotFound();
-            }
+
             return View(venue);
         }
 
         // POST: Venues/Edit/5
-        // To protect from overposting attacks, enable the specific properties you want to bind to.
-        // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("VenueId,Name,Location,Capacity,ImageUrl")] Venue venue)
+        public async Task<IActionResult> Edit(int id, Venue venue, IFormFile imageFile)
         {
             if (id != venue.VenueId)
-            {
                 return NotFound();
-            }
 
-            if (ModelState.IsValid)
+            try
             {
-                try
+                // IMAGE UPLOAD
+                if (imageFile != null && imageFile.Length > 0)
+                {
+                    var connectionString =
+                        "DefaultEndpointsProtocol=http;" +
+                        "AccountName=devstoreaccount1;" +
+                        "AccountKey=Eby8vdM02xNOcqFeqCnf2g==;" +
+                        "BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;";
+
+                    var containerName = "venueimages";
+
+                    var containerClient =
+                        new BlobContainerClient(connectionString, containerName);
+
+                    await containerClient.CreateIfNotExistsAsync();
+
+                    var blobClient =
+                        containerClient.GetBlobClient(imageFile.FileName);
+
+                    using (var stream = imageFile.OpenReadStream())
+                    {
+                        await blobClient.UploadAsync(stream, true);
+                    }
+
+                    venue.ImageUrl = blobClient.Uri.ToString();
+                }
+
+                if (ModelState.IsValid)
                 {
                     _context.Update(venue);
+
                     await _context.SaveChangesAsync();
+
+                    return RedirectToAction(nameof(Index));
                 }
-                catch (DbUpdateConcurrencyException)
-                {
-                    if (!VenueExists(venue.VenueId))
-                    {
-                        return NotFound();
-                    }
-                    else
-                    {
-                        throw;
-                    }
-                }
-                return RedirectToAction(nameof(Index));
             }
+            catch (Exception ex)
+            {
+                return Content(ex.Message + " --- " + ex.InnerException?.Message);
+            }
+
             return View(venue);
         }
 
@@ -120,16 +168,13 @@ namespace EventEaseBookingSystem.Controllers
         public async Task<IActionResult> Delete(int? id)
         {
             if (id == null)
-            {
                 return NotFound();
-            }
 
             var venue = await _context.Venues
                 .FirstOrDefaultAsync(m => m.VenueId == id);
+
             if (venue == null)
-            {
                 return NotFound();
-            }
 
             return View(venue);
         }
@@ -139,13 +184,32 @@ namespace EventEaseBookingSystem.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
-            var venue = await _context.Venues.FindAsync(id);
-            if (venue != null)
+            try
             {
-                _context.Venues.Remove(venue);
+                var hasBookings = _context.Bookings.Any(b => b.VenueId == id);
+
+                if (hasBookings)
+                {
+                    TempData["Error"] =
+                        "Cannot delete venue with active bookings.";
+
+                    return RedirectToAction(nameof(Index));
+                }
+
+                var venue = await _context.Venues.FindAsync(id);
+
+                if (venue != null)
+                {
+                    _context.Venues.Remove(venue);
+
+                    await _context.SaveChangesAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                return Content(ex.Message + " --- " + ex.InnerException?.Message);
             }
 
-            await _context.SaveChangesAsync();
             return RedirectToAction(nameof(Index));
         }
 

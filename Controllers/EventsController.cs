@@ -30,17 +30,14 @@ namespace EventEaseBookingSystem.Controllers
         public async Task<IActionResult> Details(int? id)
         {
             if (id == null)
-            {
                 return NotFound();
-            }
 
             var @event = await _context.Events
                 .Include(e => e.Venue)
                 .FirstOrDefaultAsync(m => m.EventId == id);
+
             if (@event == null)
-            {
                 return NotFound();
-            }
 
             return View(@event);
         }
@@ -48,7 +45,7 @@ namespace EventEaseBookingSystem.Controllers
         // GET: Events/Create
         public IActionResult Create()
         {
-            ViewData["VenueId"] = new SelectList(_context.Venues, "VenueId", "Location");
+            LoadVenues();
             return View();
         }
 
@@ -57,13 +54,21 @@ namespace EventEaseBookingSystem.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create([Bind("EventId,EventName,StartDate,EndDate,VenueId")] Event @event)
         {
-            if (ModelState.IsValid)
+            try
             {
-                _context.Add(@event);
-                await _context.SaveChangesAsync();
-                return RedirectToAction(nameof(Index));
+                if (ModelState.IsValid)
+                {
+                    _context.Add(@event);
+                    await _context.SaveChangesAsync();
+                    return RedirectToAction(nameof(Index));
+                }
             }
-            ViewData["VenueId"] = new SelectList(_context.Venues, "VenueId", "Location", @event.VenueId);
+            catch (Exception)
+            {
+                TempData["Error"] = "Error creating event.";
+            }
+
+            LoadVenues(@event.VenueId);
             return View(@event);
         }
 
@@ -71,16 +76,14 @@ namespace EventEaseBookingSystem.Controllers
         public async Task<IActionResult> Edit(int? id)
         {
             if (id == null)
-            {
                 return NotFound();
-            }
 
             var @event = await _context.Events.FindAsync(id);
+
             if (@event == null)
-            {
                 return NotFound();
-            }
-            ViewData["VenueId"] = new SelectList(_context.Venues, "VenueId", "Location", @event.VenueId);
+
+            LoadVenues(@event.VenueId);
             return View(@event);
         }
 
@@ -90,31 +93,30 @@ namespace EventEaseBookingSystem.Controllers
         public async Task<IActionResult> Edit(int id, [Bind("EventId,EventName,StartDate,EndDate,VenueId")] Event @event)
         {
             if (id != @event.EventId)
-            {
                 return NotFound();
-            }
 
-            if (ModelState.IsValid)
+            try
             {
-                try
+                if (ModelState.IsValid)
                 {
                     _context.Update(@event);
                     await _context.SaveChangesAsync();
+                    return RedirectToAction(nameof(Index));
                 }
-                catch (DbUpdateConcurrencyException)
-                {
-                    if (!EventExists(@event.EventId))
-                    {
-                        return NotFound();
-                    }
-                    else
-                    {
-                        throw;
-                    }
-                }
-                return RedirectToAction(nameof(Index));
             }
-            ViewData["VenueId"] = new SelectList(_context.Venues, "VenueId", "Location", @event.VenueId);
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!EventExists(@event.EventId))
+                    return NotFound();
+
+                TempData["Error"] = "Concurrency error occurred.";
+            }
+            catch (Exception)
+            {
+                TempData["Error"] = "Error updating event.";
+            }
+
+            LoadVenues(@event.VenueId);
             return View(@event);
         }
 
@@ -122,17 +124,14 @@ namespace EventEaseBookingSystem.Controllers
         public async Task<IActionResult> Delete(int? id)
         {
             if (id == null)
-            {
                 return NotFound();
-            }
 
             var @event = await _context.Events
                 .Include(e => e.Venue)
                 .FirstOrDefaultAsync(m => m.EventId == id);
+
             if (@event == null)
-            {
                 return NotFound();
-            }
 
             return View(@event);
         }
@@ -142,19 +141,46 @@ namespace EventEaseBookingSystem.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
-            var @event = await _context.Events.FindAsync(id);
-            if (@event != null)
+            try
             {
-                _context.Events.Remove(@event);
+                var hasBookings = _context.Bookings.Any(b => b.EventId == id);
+
+                if (hasBookings)
+                {
+                    TempData["Error"] = "Cannot delete event with active bookings.";
+                    return RedirectToAction(nameof(Index));
+                }
+
+                var @event = await _context.Events.FindAsync(id);
+
+                if (@event != null)
+                {
+                    _context.Events.Remove(@event);
+                    await _context.SaveChangesAsync();
+                }
+            }
+            catch (Exception)
+            {
+                TempData["Error"] = "Error deleting event.";
             }
 
-            await _context.SaveChangesAsync();
             return RedirectToAction(nameof(Index));
         }
 
         private bool EventExists(int id)
         {
             return _context.Events.Any(e => e.EventId == id);
+        }
+
+        // 🔥 CENTRAL FIX FOR DROPDOWNS (IMPORTANT)
+        private void LoadVenues(object selected = null)
+        {
+            ViewData["VenueId"] = new SelectList(
+                _context.Venues,
+                "VenueId",
+                "Name",   // ✅ FIXED (was Location)
+                selected
+            );
         }
     }
 }

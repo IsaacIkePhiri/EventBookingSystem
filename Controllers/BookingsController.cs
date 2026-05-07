@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
@@ -22,149 +21,127 @@ namespace EventEaseBookingSystem.Controllers
         // GET: Bookings
         public async Task<IActionResult> Index()
         {
-            var applicationDbContext = _context.Bookings.Include(b => b.Event).Include(b => b.Venue);
-            return View(await applicationDbContext.ToListAsync());
-        }
-
-        // GET: Bookings/Details/5
-        public async Task<IActionResult> Details(int? id)
-        {
-            if (id == null)
-            {
-                return NotFound();
-            }
-
-            var booking = await _context.Bookings
+            var bookings = _context.Bookings
                 .Include(b => b.Event)
-                .Include(b => b.Venue)
-                .FirstOrDefaultAsync(m => m.BookingId == id);
-            if (booking == null)
-            {
-                return NotFound();
-            }
+                .Include(b => b.Venue);
 
-            return View(booking);
+            return View(await bookings.ToListAsync());
         }
 
         // GET: Bookings/Create
         public IActionResult Create()
         {
-            ViewData["EventId"] = new SelectList(_context.Events, "EventId", "EventName");
-            ViewData["VenueId"] = new SelectList(_context.Venues, "VenueId", "Location");
+            LoadDropdowns();
             return View();
         }
 
         // POST: Bookings/Create
-        // To protect from overposting attacks, enable the specific properties you want to bind to.
-        // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("BookingId,VenueId,EventId,CustomerName,BookingDate")] Booking booking)
+        public async Task<IActionResult> Create(Booking booking)
         {
-            if (ModelState.IsValid)
+            try
             {
-                _context.Add(booking);
-                await _context.SaveChangesAsync();
-                return RedirectToAction(nameof(Index));
-            }
-            ViewData["EventId"] = new SelectList(_context.Events, "EventId", "EventName", booking.EventId);
-            ViewData["VenueId"] = new SelectList(_context.Venues, "VenueId", "Location", booking.VenueId);
-            return View(booking);
-        }
-
-        // GET: Bookings/Edit/5
-        public async Task<IActionResult> Edit(int? id)
-        {
-            if (id == null)
-            {
-                return NotFound();
-            }
-
-            var booking = await _context.Bookings.FindAsync(id);
-            if (booking == null)
-            {
-                return NotFound();
-            }
-            ViewData["EventId"] = new SelectList(_context.Events, "EventId", "EventName", booking.EventId);
-            ViewData["VenueId"] = new SelectList(_context.Venues, "VenueId", "Location", booking.VenueId);
-            return View(booking);
-        }
-
-        // POST: Bookings/Edit/5
-        // To protect from overposting attacks, enable the specific properties you want to bind to.
-        // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("BookingId,VenueId,EventId,CustomerName,BookingDate")] Booking booking)
-        {
-            if (id != booking.BookingId)
-            {
-                return NotFound();
-            }
-
-            if (ModelState.IsValid)
-            {
-                try
+                // 🔥 FORCE VALIDATION CHECK
+                if (booking.VenueId == 0 || booking.EventId == 0)
                 {
-                    _context.Update(booking);
+                    ModelState.AddModelError("", "Please select both Venue and Event.");
+                }
+
+                // 🚫 DOUBLE BOOKING CHECK
+                var exists = await _context.Bookings.AnyAsync(b =>
+                    b.VenueId == booking.VenueId &&
+                    b.BookingDate.Date == booking.BookingDate.Date
+                );
+
+                if (exists)
+                {
+                    ModelState.AddModelError("", "This venue is already booked on that date.");
+                }
+
+                if (ModelState.IsValid)
+                {
+                    _context.Bookings.Add(booking);
                     await _context.SaveChangesAsync();
+
+                    return RedirectToAction(nameof(Index));
                 }
-                catch (DbUpdateConcurrencyException)
-                {
-                    if (!BookingExists(booking.BookingId))
-                    {
-                        return NotFound();
-                    }
-                    else
-                    {
-                        throw;
-                    }
-                }
-                return RedirectToAction(nameof(Index));
             }
-            ViewData["EventId"] = new SelectList(_context.Events, "EventId", "EventName", booking.EventId);
-            ViewData["VenueId"] = new SelectList(_context.Venues, "VenueId", "Location", booking.VenueId);
+            catch (Exception ex)
+            {
+                // 🔥 SHOW REAL ERROR IN BROWSER
+                return Content("ERROR: " + ex.Message + " | " + ex.InnerException?.Message);
+            }
+
+            LoadDropdowns(booking);
             return View(booking);
         }
 
-        // GET: Bookings/Delete/5
+        // GET: Bookings/Delete
         public async Task<IActionResult> Delete(int? id)
         {
-            if (id == null)
-            {
-                return NotFound();
-            }
+            if (id == null) return NotFound();
 
             var booking = await _context.Bookings
                 .Include(b => b.Event)
                 .Include(b => b.Venue)
                 .FirstOrDefaultAsync(m => m.BookingId == id);
-            if (booking == null)
-            {
-                return NotFound();
-            }
+
+            if (booking == null) return NotFound();
 
             return View(booking);
         }
 
-        // POST: Bookings/Delete/5
+        // POST: Delete
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
             var booking = await _context.Bookings.FindAsync(id);
+
             if (booking != null)
             {
                 _context.Bookings.Remove(booking);
+                await _context.SaveChangesAsync();
             }
 
-            await _context.SaveChangesAsync();
             return RedirectToAction(nameof(Index));
         }
 
-        private bool BookingExists(int id)
+        // 🔍 SEARCH
+        public async Task<IActionResult> Search(string query)
         {
-            return _context.Bookings.Any(e => e.BookingId == id);
+            var bookings = _context.Bookings
+                .Include(b => b.Event)
+                .Include(b => b.Venue)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(query))
+            {
+                bookings = bookings.Where(b =>
+                    b.Event.EventName.Contains(query) ||
+                    b.BookingId.ToString().Contains(query));
+            }
+
+            return View("Index", await bookings.ToListAsync());
+        }
+
+        // 🔧 LOAD DROPDOWNS
+        private void LoadDropdowns(Booking booking = null)
+        {
+            ViewData["VenueId"] = new SelectList(
+                _context.Venues,
+                "VenueId",
+                "Name",
+                booking?.VenueId
+            );
+
+            ViewData["EventId"] = new SelectList(
+                _context.Events,
+                "EventId",
+                "EventName",
+                booking?.EventId
+            );
         }
     }
 }
