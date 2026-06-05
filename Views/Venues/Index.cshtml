@@ -22,7 +22,7 @@
                 @Html.DisplayNameFor(model => model.Capacity)
             </th>
             <th>
-                @Html.DisplayNameFor(model => model.ImageUrl)
+                Image
             </th>
             <th></th>
         </tr>
@@ -40,7 +40,14 @@
                 @Html.DisplayFor(modelItem => item.Capacity)
             </td>
             <td>
-                @Html.DisplayFor(modelItem => item.ImageUrl)
+                @if (!string.IsNullOrEmpty(item.ImageUrl))
+                {
+                    <img src="@item.ImageUrl" alt="@item.Name" style="max-width: 120px; max-height: 80px;" />
+                }
+                else
+                {
+                    <span>No image</span>
+                }
             </td>
             <td>
                 <a asp-action="Edit" asp-route-id="@item.VenueId">Edit</a> |

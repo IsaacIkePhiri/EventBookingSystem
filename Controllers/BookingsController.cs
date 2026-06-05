@@ -23,6 +23,7 @@ namespace EventEaseBookingSystem.Controllers
         {
             var bookings = _context.Bookings
                 .Include(b => b.Event)
+                    .ThenInclude(e => e.EventType)
                 .Include(b => b.Venue);
 
             return View(await bookings.ToListAsync());
@@ -84,6 +85,7 @@ namespace EventEaseBookingSystem.Controllers
 
             var booking = await _context.Bookings
                 .Include(b => b.Event)
+                    .ThenInclude(e => e.EventType)
                 .Include(b => b.Venue)
                 .FirstOrDefaultAsync(m => m.BookingId == id);
 
@@ -113,13 +115,16 @@ namespace EventEaseBookingSystem.Controllers
         {
             var bookings = _context.Bookings
                 .Include(b => b.Event)
+                    .ThenInclude(e => e.EventType)
                 .Include(b => b.Venue)
                 .AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(query))
             {
                 bookings = bookings.Where(b =>
-                    b.Event.EventName.Contains(query) ||
+                    b.Event!.EventName.Contains(query) ||
+                    b.Event.EventType!.Name.Contains(query) ||
+                    b.Venue!.Name.Contains(query) ||
                     b.BookingId.ToString().Contains(query));
             }
 

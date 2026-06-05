@@ -1,6 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 using System.Linq;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -20,148 +20,182 @@ namespace EventEaseBookingSystem.Controllers
         }
 
         // GET: Events
-        public async Task<IActionResult> Index()
+        // Advanced filtering for Part 3: event type, venue, date range and availability.
+        public async Task<IActionResult> Index(
+            string? searchString,
+            int? eventTypeId,
+            int? venueId,
+            DateTime? startDate,
+            DateTime? endDate,
+            bool? availableOnly)
         {
-            var applicationDbContext = _context.Events.Include(e => e.Venue);
-            return View(await applicationDbContext.ToListAsync());
+            var eventsQuery = _context.Events
+                .Include(e => e.Venue)
+                .Include(e => e.EventType)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(searchString))
+            {
+                eventsQuery = eventsQuery.Where(e =>
+                    e.EventName.Contains(searchString) ||
+                    e.Venue!.Name.Contains(searchString) ||
+                    e.Venue.Location.Contains(searchString) ||
+                    e.EventType!.Name.Contains(searchString));
+            }
+
+            if (eventTypeId.HasValue && eventTypeId.Value > 0)
+            {
+                eventsQuery = eventsQuery.Where(e => e.EventTypeId == eventTypeId.Value);
+            }
+
+            if (venueId.HasValue && venueId.Value > 0)
+            {
+                eventsQuery = eventsQuery.Where(e => e.VenueId == venueId.Value);
+            }
+
+            if (startDate.HasValue)
+            {
+                eventsQuery = eventsQuery.Where(e => e.EndDate.Date >= startDate.Value.Date);
+            }
+
+            if (endDate.HasValue)
+            {
+                eventsQuery = eventsQuery.Where(e => e.StartDate.Date <= endDate.Value.Date);
+            }
+
+            if (availableOnly == true)
+            {
+                eventsQuery = eventsQuery.Where(e => !_context.Bookings.Any(b => b.EventId == e.EventId));
+            }
+
+            LoadFilterDropdowns(eventTypeId, venueId);
+
+            ViewData["BookedEventIds"] = await _context.Bookings
+                .Select(b => b.EventId)
+                .Distinct()
+                .ToListAsync();
+
+            ViewData["CurrentSearch"] = searchString;
+            ViewData["CurrentStartDate"] = startDate?.ToString("yyyy-MM-dd");
+            ViewData["CurrentEndDate"] = endDate?.ToString("yyyy-MM-dd");
+            ViewData["AvailableOnly"] = availableOnly == true;
+
+            return View(await eventsQuery.OrderBy(e => e.StartDate).ToListAsync());
         }
 
-        // GET: Events/Details/5
         public async Task<IActionResult> Details(int? id)
         {
-            if (id == null)
-                return NotFound();
+            if (id == null) return NotFound();
 
             var @event = await _context.Events
                 .Include(e => e.Venue)
+                .Include(e => e.EventType)
                 .FirstOrDefaultAsync(m => m.EventId == id);
 
-            if (@event == null)
-                return NotFound();
+            if (@event == null) return NotFound();
 
             return View(@event);
         }
 
-        // GET: Events/Create
         public IActionResult Create()
         {
-            LoadVenues();
+            LoadDropdowns();
             return View();
         }
 
-        // POST: Events/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("EventId,EventName,StartDate,EndDate,VenueId")] Event @event)
+        public async Task<IActionResult> Create([Bind("EventId,EventName,StartDate,EndDate,VenueId,EventTypeId")] Event @event)
         {
-            try
+            if (@event.EndDate < @event.StartDate)
             {
-                if (ModelState.IsValid)
-                {
-                    _context.Add(@event);
-                    await _context.SaveChangesAsync();
-                    return RedirectToAction(nameof(Index));
-                }
-            }
-            catch (Exception)
-            {
-                TempData["Error"] = "Error creating event.";
+                ModelState.AddModelError("EndDate", "End date cannot be before start date.");
             }
 
-            LoadVenues(@event.VenueId);
+            if (ModelState.IsValid)
+            {
+                _context.Add(@event);
+                await _context.SaveChangesAsync();
+                return RedirectToAction(nameof(Index));
+            }
+
+            LoadDropdowns(@event.VenueId, @event.EventTypeId);
             return View(@event);
         }
 
-        // GET: Events/Edit/5
         public async Task<IActionResult> Edit(int? id)
         {
-            if (id == null)
-                return NotFound();
+            if (id == null) return NotFound();
 
             var @event = await _context.Events.FindAsync(id);
+            if (@event == null) return NotFound();
 
-            if (@event == null)
-                return NotFound();
-
-            LoadVenues(@event.VenueId);
+            LoadDropdowns(@event.VenueId, @event.EventTypeId);
             return View(@event);
         }
 
-        // POST: Events/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("EventId,EventName,StartDate,EndDate,VenueId")] Event @event)
+        public async Task<IActionResult> Edit(int id, [Bind("EventId,EventName,StartDate,EndDate,VenueId,EventTypeId")] Event @event)
         {
-            if (id != @event.EventId)
-                return NotFound();
+            if (id != @event.EventId) return NotFound();
 
-            try
+            if (@event.EndDate < @event.StartDate)
             {
-                if (ModelState.IsValid)
+                ModelState.AddModelError("EndDate", "End date cannot be before start date.");
+            }
+
+            if (ModelState.IsValid)
+            {
+                try
                 {
                     _context.Update(@event);
                     await _context.SaveChangesAsync();
                     return RedirectToAction(nameof(Index));
                 }
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!EventExists(@event.EventId))
-                    return NotFound();
-
-                TempData["Error"] = "Concurrency error occurred.";
-            }
-            catch (Exception)
-            {
-                TempData["Error"] = "Error updating event.";
+                catch (DbUpdateConcurrencyException)
+                {
+                    if (!EventExists(@event.EventId)) return NotFound();
+                    throw;
+                }
             }
 
-            LoadVenues(@event.VenueId);
+            LoadDropdowns(@event.VenueId, @event.EventTypeId);
             return View(@event);
         }
 
-        // GET: Events/Delete/5
         public async Task<IActionResult> Delete(int? id)
         {
-            if (id == null)
-                return NotFound();
+            if (id == null) return NotFound();
 
             var @event = await _context.Events
                 .Include(e => e.Venue)
+                .Include(e => e.EventType)
                 .FirstOrDefaultAsync(m => m.EventId == id);
 
-            if (@event == null)
-                return NotFound();
+            if (@event == null) return NotFound();
 
             return View(@event);
         }
 
-        // POST: Events/Delete/5
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
-            try
+            var hasBookings = await _context.Bookings.AnyAsync(b => b.EventId == id);
+
+            if (hasBookings)
             {
-                var hasBookings = _context.Bookings.Any(b => b.EventId == id);
-
-                if (hasBookings)
-                {
-                    TempData["Error"] = "Cannot delete event with active bookings.";
-                    return RedirectToAction(nameof(Index));
-                }
-
-                var @event = await _context.Events.FindAsync(id);
-
-                if (@event != null)
-                {
-                    _context.Events.Remove(@event);
-                    await _context.SaveChangesAsync();
-                }
+                TempData["Error"] = "Cannot delete event with active bookings.";
+                return RedirectToAction(nameof(Index));
             }
-            catch (Exception)
+
+            var @event = await _context.Events.FindAsync(id);
+
+            if (@event != null)
             {
-                TempData["Error"] = "Error deleting event.";
+                _context.Events.Remove(@event);
+                await _context.SaveChangesAsync();
             }
 
             return RedirectToAction(nameof(Index));
@@ -172,15 +206,16 @@ namespace EventEaseBookingSystem.Controllers
             return _context.Events.Any(e => e.EventId == id);
         }
 
-        // 🔥 CENTRAL FIX FOR DROPDOWNS (IMPORTANT)
-        private void LoadVenues(object selected = null)
+        private void LoadDropdowns(object? selectedVenue = null, object? selectedEventType = null)
         {
-            ViewData["VenueId"] = new SelectList(
-                _context.Venues,
-                "VenueId",
-                "Name",   // ✅ FIXED (was Location)
-                selected
-            );
+            ViewData["VenueId"] = new SelectList(_context.Venues.OrderBy(v => v.Name), "VenueId", "Name", selectedVenue);
+            ViewData["EventTypeId"] = new SelectList(_context.EventTypes.OrderBy(et => et.Name), "EventTypeId", "Name", selectedEventType);
+        }
+
+        private void LoadFilterDropdowns(object? selectedEventType = null, object? selectedVenue = null)
+        {
+            ViewData["EventTypeFilter"] = new SelectList(_context.EventTypes.OrderBy(et => et.Name), "EventTypeId", "Name", selectedEventType);
+            ViewData["VenueFilter"] = new SelectList(_context.Venues.OrderBy(v => v.Name), "VenueId", "Name", selectedVenue);
         }
     }
 }

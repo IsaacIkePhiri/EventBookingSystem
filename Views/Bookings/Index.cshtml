@@ -21,7 +21,7 @@
             <input type="text"
                    name="query"
                    class="form-control"
-                   placeholder="Search by Booking ID or Event Name..." />
+                   placeholder="Search by Booking ID, Event, Event Type, or Venue..." />
         </div>
 
         <div class="col-md-2">
@@ -52,6 +52,7 @@
             <th>Booking Date</th>
             <th>Venue</th>
             <th>Event</th>
+            <th>Event Type</th>
             <th>Actions</th>
         </tr>
     </thead>
@@ -73,11 +74,15 @@
                 </td>
 
                 <td>
-                    @item.Venue?.Location
+                    @item.Venue?.Name
                 </td>
 
                 <td>
                     @item.Event?.EventName
+                </td>
+
+                <td>
+                    @item.Event?.EventType?.Name
                 </td>
 
                 <td>
